@@ -203,6 +203,39 @@ body {
 .btn-primary:hover,
 .btn-secondary:hover { opacity: 0.85; }
 
+/* ── 회원가입 헤더 ── */
+.signup-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.signup-header .auth-title {
+  margin: 0;
+  flex: 1;
+}
+
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.back-btn:hover { color: var(--color-text-primary); }
+
+/* ── 비밀번호 힌트 ── */
+.password-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: -4px;
+}
+
 /* ── 인증 메시지 ── */
 .auth-message {
   font-size: 0.8125rem;

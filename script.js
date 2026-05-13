@@ -2,7 +2,6 @@
 
 // ══════════════════════════════════════
 // Supabase 설정
-// Settings > API 에서 복사해 교체하세요
 // ══════════════════════════════════════
 const SUPABASE_URL      = 'https://gxhhigbdgnrfoutoxswt.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd4aGhpZ2JkZ25yZm91dG94c3d0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MDY2MTcsImV4cCI6MjA5NDE4MjYxN30.WZ2eztjS1J1aZX5gGJho8bY0PLdR2xqG0yKJ7KWjgWs';
@@ -11,18 +10,31 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // ── 전역 상태 ──
 let currentUser    = null;
 let draggedCard    = null;
-let lastSignedInId = null;   // 중복 실행 방지용
+let lastSignedInId = null;
 
 // ══════════════════════════════════════
-// 인증 UI
+// 인증 UI — 오버레이 / 뷰 전환
 // ══════════════════════════════════════
 
 function showAuthOverlay() {
+  showLoginView();
   document.getElementById('auth-overlay').classList.remove('hidden');
 }
 
 function hideAuthOverlay() {
   document.getElementById('auth-overlay').classList.add('hidden');
+}
+
+function showLoginView() {
+  document.getElementById('view-login').classList.remove('hidden');
+  document.getElementById('view-signup').classList.add('hidden');
+  clearAuthMessage();
+}
+
+function showSignupView() {
+  document.getElementById('view-login').classList.add('hidden');
+  document.getElementById('view-signup').classList.remove('hidden');
+  clearAuthMessage();
 }
 
 function setAuthMessage(msg, isError = false) {
@@ -55,6 +67,19 @@ function clearUserBar() {
 }
 
 // ══════════════════════════════════════
+// 비밀번호 유효성 검사
+// 9~20자, 영문자 + 숫자 + 특수문자 필수
+// ══════════════════════════════════════
+
+function validatePassword(pw) {
+  if (pw.length < 9 || pw.length > 20) return '비밀번호는 9~20자여야 합니다.';
+  if (!/[A-Za-z]/.test(pw))            return '영문자를 포함해야 합니다.';
+  if (!/[0-9]/.test(pw))               return '숫자를 포함해야 합니다.';
+  if (!/[^A-Za-z0-9]/.test(pw))        return '특수문자를 포함해야 합니다.';
+  return null;
+}
+
+// ══════════════════════════════════════
 // Supabase DB — 카드 불러오기 / 저장
 // ══════════════════════════════════════
 
@@ -70,7 +95,6 @@ async function loadCards(userId) {
     return [];
   }
 
-  // 처음 로그인한 사용자 → 초기 카드 삽입
   if (!data || data.length === 0) {
     return await insertInitialCards(userId);
   }
@@ -97,7 +121,6 @@ async function insertInitialCards(userId) {
   return data;
 }
 
-// 현재 DOM 상태를 읽어 전체 카드를 upsert (이동·순서변경 후 호출)
 async function saveCards() {
   if (!currentUser) return;
 
@@ -127,7 +150,6 @@ async function saveCards() {
 // 카드 생성 / 보드 렌더링
 // ══════════════════════════════════════
 
-// cardId: Supabase가 생성한 UUID
 function createCard(text, cardId, userId) {
   const card = document.createElement('div');
   card.className      = 'card';
@@ -138,7 +160,6 @@ function createCard(text, cardId, userId) {
   return card;
 }
 
-// cards: Supabase에서 받은 flat 배열 [{ id, text, column_id, user_id, order }, ...]
 function renderBoard(cards) {
   document.querySelectorAll('.card-list').forEach(cl => { cl.innerHTML = ''; });
 
@@ -246,7 +267,6 @@ function bindAddButtons() {
 
       const order = cardList.querySelectorAll('.card').length;
 
-      // DB에 먼저 삽입 → UUID 반환받아 DOM에 사용
       const { data, error } = await sb
         .from('cards')
         .insert({
@@ -275,12 +295,9 @@ function bindAddButtons() {
 // ══════════════════════════════════════
 
 async function handleSignedIn(user) {
-  // 동일 사용자로 이미 초기화됐으면 재실행 방지
   if (lastSignedInId === user.id) return;
   lastSignedInId = user.id;
 
-  // async 작업 전에 userId를 로컬에 고정
-  // (await 중 currentUser가 교체돼도 이 userId는 바뀌지 않음)
   const userId = user.id;
 
   currentUser = {
@@ -297,7 +314,6 @@ async function handleSignedIn(user) {
 
   const cards = await loadCards(userId);
 
-  // await 완료 후 다른 사용자로 교체됐으면 렌더링 중단
   if (currentUser?.id !== userId) return;
 
   renderBoard(cards);
@@ -306,7 +322,7 @@ async function handleSignedIn(user) {
 
 function handleSignedOut() {
   currentUser    = null;
-  lastSignedInId = null;   // 로그아웃 시 초기화 → 재로그인 허용
+  lastSignedInId = null;
   clearUserBar();
   document.querySelectorAll('.card-list').forEach(cl => { cl.innerHTML = ''; });
   showAuthOverlay();
@@ -319,6 +335,7 @@ function handleSignedOut() {
 function bindAuthButtons() {
   const redirectTo = window.location.href.replace(/[?#].*$/, '');
 
+  // ── OAuth ──
   document.getElementById('btn-google').addEventListener('click', () => {
     clearAuthMessage();
     sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo } });
@@ -329,6 +346,7 @@ function bindAuthButtons() {
     sb.auth.signInWithOAuth({ provider: 'github', options: { redirectTo } });
   });
 
+  // ── 로그인 폼 ──
   document.getElementById('email-form').addEventListener('submit', async e => {
     e.preventDefault();
     clearAuthMessage();
@@ -342,19 +360,71 @@ function bindAuthButtons() {
     if (error) setAuthMessage(error.message, true);
   });
 
-  document.getElementById('signup-btn').addEventListener('click', async () => {
-    clearAuthMessage();
-    const email    = document.getElementById('email-input').value.trim();
-    const password = document.getElementById('password-input').value;
-    if (!email || !password) {
-      setAuthMessage('이메일과 비밀번호를 입력해주세요.', true);
-      return;
-    }
-    const { error } = await sb.auth.signUp({ email, password });
-    if (error) setAuthMessage(error.message, true);
-    else       setAuthMessage('확인 이메일을 발송했습니다. 받은편지함을 확인해주세요.');
+  // ── 회원가입 뷰 전환 ──
+  document.getElementById('goto-signup-btn').addEventListener('click', () => {
+    showSignupView();
   });
 
+  document.getElementById('back-btn').addEventListener('click', () => {
+    showLoginView();
+  });
+
+  // ── 회원가입 폼 ──
+  document.getElementById('signup-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    clearAuthMessage();
+
+    const name     = document.getElementById('signup-name').value.trim();
+    const email    = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    const confirm  = document.getElementById('signup-confirm').value;
+
+    if (!name) {
+      setAuthMessage('사용자 이름을 입력해주세요.', true);
+      return;
+    }
+    if (!email) {
+      setAuthMessage('이메일을 입력해주세요.', true);
+      return;
+    }
+
+    const pwError = validatePassword(password);
+    if (pwError) {
+      setAuthMessage(pwError, true);
+      return;
+    }
+
+    if (password !== confirm) {
+      setAuthMessage('비밀번호가 일치하지 않습니다.', true);
+      return;
+    }
+
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
+
+    if (error) {
+      setAuthMessage(error.message, true);
+      return;
+    }
+
+    if (data.session) {
+      // 이메일 확인 불필요 설정 → 즉시 로그인 (onAuthStateChange가 처리)
+      setAuthMessage('회원가입이 완료되었습니다!');
+    } else {
+      // 이메일 확인 필요 설정
+      setAuthMessage('확인 이메일을 발송했습니다. 이메일 확인 후 로그인해주세요.');
+      setTimeout(() => {
+        showLoginView();
+        // 로그인 폼에 이메일 자동 입력
+        document.getElementById('email-input').value = email;
+      }, 2500);
+    }
+  });
+
+  // ── 로그아웃 ──
   document.getElementById('signout-btn').addEventListener('click', () => {
     sb.auth.signOut();
   });
@@ -365,6 +435,9 @@ function bindAuthButtons() {
 // ══════════════════════════════════════
 
 function init() {
+  // onAuthStateChange 등록 — INITIAL_SESSION 이벤트로 현재 세션을 즉시 확인.
+  // 오버레이가 hidden으로 시작하므로, 세션이 없을 때만 handleSignedOut이 오버레이를 표시.
+  // 이 방식으로 새로고침 시 로그인 팝업 깜박임을 방지.
   sb.auth.onAuthStateChange((_event, session) => {
     if (session?.user) handleSignedIn(session.user);
     else               handleSignedOut();
